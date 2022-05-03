@@ -1,23 +1,28 @@
+# Author: Marvin Ahlborn
+# 
+# Implementation of the Hamiltonian Monte Carlo Algorithm based
+# on its Wikipedia article and "Bayesian Statistics" by Ben Lambert.
+
 library(MASS)
 
-grad <- function(f, x0, eps=1e-5)
+grad <- function(f, x0, eps=1e-4)
 # Computes gradient of function f numerically via
 # finite difference at point x0.
 {
     n <- length(x0)
     f0 <- f(x0)
-    grad <- vector(mode="numeric", length=n)
+    del_f <- vector(mode="numeric", length=n)
 
     for (i in 1:n)
     {
         xeps <- x0
         xeps[i] <- xeps[i] + eps
-        grad[i] <- (f(xeps) - f(x0)) / eps
+        del_f[i] <- (f(xeps) - f(x0)) / eps
     }
-    return(grad)
+    return(del_f)
 }
 
-hmc <- function(p, x0, M, dt, L, N)
+hmc <- function(prob, x0, M, dt, L, N)
 # Hamiltonian Monte-Carlo sampling algorithm.
 # p is the unnormalized probability density to sample from.
 # x0 is the starting point for sampling.
@@ -28,7 +33,7 @@ hmc <- function(p, x0, M, dt, L, N)
 {
     len <- length(x0)
     M_inv <- solve(M)
-    U <- function(x) -log(p(x))  # Potential
+    U <- function(x) min(1e6, -log(prob(x)))  # Potential (capped for numerical stability reasons)
     H <- function(x, p) U(x) + 0.5 * p %*% (M_inv %*% p)  # Hamiltonian
     samples <- matrix(0, nrow=N, ncol=len, byrow=TRUE)
     samples[1,] <- x0
@@ -42,10 +47,14 @@ hmc <- function(p, x0, M, dt, L, N)
         p <- p_init
 
         # Leapfrog integration
-        for (i in 1:L)
+        for (t in 1:L)
         {
-            # TODO
             grad_U <- grad(U, x)
+            p_temp <- p - dt/2 * grad_U
+            x <- x + dt * (M_inv %*% p_temp)
+
+            grad_U <- grad(U, x)
+            p <- p_temp - dt/2 * grad_U
         }
 
         # Accept-Reject step
